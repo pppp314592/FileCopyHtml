@@ -1,4 +1,4 @@
-/* app.js — UI 配線（フォルダ枠 / 一覧 / 複数選択 / コピー実行 / ini 永続化） */
+﻿/* app.js — UI 配線（フォルダ枠 / 一覧 / 複数選択 / コピー実行 / ini 永続化） */
 (function (global) {
   'use strict';
 
@@ -133,17 +133,11 @@
     var actions = document.createElement('span');
     actions.className = 'slot-actions';
 
-    var pick = document.createElement('button');
+var pick = document.createElement('button');
     pick.type = 'button';
     pick.className = 'btn btn-sm';
     pick.textContent = '選択…';
     pick.addEventListener('click', function () { pickFolder(slot); });
-
-    var rescan = document.createElement('button');
-    rescan.type = 'button';
-    rescan.className = 'btn btn-sm';
-    rescan.textContent = '再スキャン';
-    rescan.addEventListener('click', function () { rescanSlot(slot); });
 
     var clear = document.createElement('button');
     clear.type = 'button';
@@ -152,7 +146,6 @@
     clear.addEventListener('click', function () { clearSlot(slot); });
 
     actions.appendChild(pick);
-    actions.appendChild(rescan);
     actions.appendChild(clear);
 
     row.appendChild(idx);
@@ -161,14 +154,20 @@
     row.appendChild(stat);
     row.appendChild(actions);
 
-    path.addEventListener('change', function () {
+path.addEventListener('change', function () {
       slot.path = path.value.trim();
+      if (slot.pathDraft) {
+        /* 手動で区切りを含むパスに修正したら確定扱いにする */
+        slot.pathDraft = !/[\\/]/.test(slot.path);
+        if (!slot.pathDraft) slot.pathNote = '';
+      }
+      renderSlotRow(slot);
       persist();
       writeIniQuiet();
     });
 
-    slot.row = row;
-    slot.els = { idx: idx, name: name, path: path, stat: stat, pick: pick, rescan: rescan, clear: clear };
+slot.row = row;
+    slot.els = { idx: idx, name: name, path: path, stat: stat, pick: pick, clear: clear };
     return row;
   }
 
@@ -181,9 +180,12 @@
     e.name.textContent = hasHandle ? (slot.label || '(名前不明)') : '未設定';
     e.name.className = 'slot-name' + (hasHandle ? '' : ' is-empty');
     e.name.title = hasHandle ? slotTitle(slot) + ' / ' + (slot.label || '') : '未設定';
-    if (document.activeElement !== e.path) e.path.value = slot.path || '';
+if (document.activeElement !== e.path) e.path.value = slot.path || '';
+    e.path.classList.toggle('is-draft', !!slot.pathDraft);
+    e.path.title = slot.pathDraft
+      ? 'フォルダ選択の結果を反映したパスです。実際の場所是否符合確認してください。'
+      : 'ini に記録するパス（例: \\\\サーバー\\共有\\data）';
 
-    e.rescan.disabled = !hasHandle || state.busy;
     e.pick.disabled = state.busy;
 
     var statText = '';
@@ -199,8 +201,8 @@
         statText = '未走査';
       }
     }
-    e.stat.textContent = statText;
-    e.stat.title = slot.note || '';
+e.stat.textContent = statText;
+    e.stat.title = [slot.pathNote, slot.note].filter(Boolean).join(' / ');
 
     slot.row.classList.toggle('is-empty', !hasHandle);
     slot.row.classList.toggle('is-error', !!slot.error);
@@ -226,11 +228,32 @@ function renderSlotRows() {
     updateControls();
   }
 
-  /* パスの末尾とフォルダ名が一致するか（再選択時に古いパスを保持するか判定） */
-  function pathMatchesFolder(path, folderName) {
-    if (!path || !folderName) return false;
-    var tail = String(path).replace(/[\\/]+$/, '').split(/[\\/]/).pop();
-    return !!tail && tail.toLowerCase() === String(folderName).toLowerCase();
+  /* フォルダ選択結果をパス欄へ反映する。
+     File System Access API ではフルパスを取得できないため、
+     空ならフォルダ名で初期化し、末尾が違えば末尾（フォルダ名）を差し替える。 */
+  function reflectPath(slot, folderName) {
+    var name = String(folderName || '').trim();
+    if (!name) return 'none';
+
+    var cur = String(slot.path || '').trim().replace(/[\\/]+$/, '');
+    if (!cur) {
+      slot.path = name;
+      slot.pathDraft = true;
+      slot.pathNote = 'パスはフォルダ名のみで自動入力されました。実際の場所（例: \\\\サーバー\\共有\\' + name + '）を入力してください。';
+      return 'init';
+    }
+
+    var tail = cur.split(/[\\/]/).pop();
+    if (tail && tail.toLowerCase() === name.toLowerCase()) {
+      slot.pathDraft = false;
+      slot.pathNote = '';
+      return 'same';
+    }
+
+    slot.path = /[\\/]/.test(cur) ? cur.replace(/[\\/][^\\/]*$/, '') + '\\' + name : name;
+    slot.pathDraft = true;
+    slot.pathNote = 'パス欄の末尾を「' + name + '」に更新しました。実際の場所かどうかを確認してください。';
+    return 'replaced';
   }
 
   function pickFolder(slot) {
@@ -244,13 +267,12 @@ function renderSlotRows() {
         slot.handle = handle;
         slot.label = handle.name || '';
         slot.error = null;
-        slot.note = '';
         slot.scanState = 'idle';
-        if (!pathMatchesFolder(slot.path, slot.label)) {
-          if (slot.path) log('warn', slotTitle(slot) + '：記録済みパスは別のフォルダを指しているためクリアしました。必要なら「パス」欄へ入力してください。');
-          slot.path = '';
-        }
+
+        var mode = reflectPath(slot, slot.label);
         log('ok', slotTitle(slot) + ' を設定: ' + (slot.label || '(名前不明)') + (slot.path ? ' / ' + slot.path : ''));
+        if (mode !== 'same') log('warn', slot.pathNote);
+
         renderSlotRows();
         persist();
         writeIniQuiet();
@@ -323,6 +345,7 @@ function renderSlotRows() {
     });
   }
 
+/* 全フォルダ一括での再走査（フォルダ枠ごとの個別ボタンは設けない） */
   function rescanAll() {
     if (state.busy) return;
     var targets = allSlots().filter(function (s) { return !!s.handle; });
@@ -332,7 +355,10 @@ function renderSlotRows() {
     }
     var chain = Promise.resolve();
     targets.forEach(function (slot) { chain = chain.then(function () { return rescanSlot(slot); }); });
-    chain.then(function () { log('ok', '再スキャンを完了しました'); });
+    chain.then(function () {
+      var n = targets.length;
+      log('ok', '全フォルダの再スキャンを完了しました（' + n + ' フォルダ）');
+    });
   }
 
   /* ================================================================== *
@@ -434,12 +460,17 @@ var dir = state.sortDir;
     return state.visible;
   }
 
-  function resultClass(res) {
+function resultClass(res) {
     if (res === 'copying') return ' is-copying';
     if (res === 'copied') return ' is-done';
     if (res === 'skipped') return ' is-skipped';
     if (res === 'error') return ' is-failed';
     return '';
+  }
+
+  /* コピー先のファイルは参照のみ（コピーの対象にならないため選択不可） */
+  function isSelectable(e) {
+    return !!e && e.role === 'source';
   }
 
   function stateTagHtml(e) {
@@ -463,13 +494,15 @@ var dir = state.sortDir;
     return '';
   }
 
-  function buildRow(e) {
+function buildRow(e) {
     var tr = document.createElement('tr');
     var res = state.results[e.key];
+    var selectable = isSelectable(e);
     tr.dataset.key = e.key;
-    tr.className = (state.selection.has(e.key) ? 'is-selected' : '') + resultClass(res);
+    tr.className = (selectable && state.selection.has(e.key) ? 'is-selected' : '') + (selectable ? '' : ' is-fixed') + resultClass(res);
     tr.innerHTML =
-      '<td class="col-check"><input type="checkbox" class="row-check"' + (state.selection.has(e.key) ? ' checked' : '') + '></td>' +
+      '<td class="col-check"><input type="checkbox" class="row-check"' + (selectable && state.selection.has(e.key) ? ' checked' : '') +
+        (selectable ? '' : ' disabled title="コピー先は参照のみのため選択できません"') + '></td>' +
       '<td class="col-slot" title="' + util.escapeHtml(e.slotTitleText + ' / ' + (slotById(e.slotId) ? slotById(e.slotId).label : '')) + '">' +
         '<span class="tag ' + (e.role === 'dest' ? 'dest' : 'src') + '">' + e.slotLabel + '</span></td>' +
       '<td class="col-name" title="' + util.escapeHtml(e.path) + '">' + nameHtml(e) + '</td>' +
@@ -539,25 +572,24 @@ var dir = state.sortDir;
     if (state.dest && state.dest.truncated) parts.push('コピー先は上限到達');
     el.listSummary.textContent = parts.join('　');
 
-    var selCount = 0, selBytes = 0, selSrc = 0;
+var selCount = 0, selBytes = 0;
     state.selection.forEach(function (key) {
       var e = state.index[key];
       if (!e) return;
       selCount += 1;
       selBytes += e.size || 0;
-      if (e.role === 'source') selSrc += 1;
     });
     el.selSummary.textContent = selCount
-      ? '選択 ' + selCount + ' 件 / ' + util.formatBytes(selBytes) + '（うちコピー元 ' + selSrc + ' 件）'
-      : '未選択';
+      ? '選択 ' + selCount + ' 件 / ' + util.formatBytes(selBytes) + '（すべてコピー対象）'
+      : '未選択（コピー元のファイルを選択してください）';
   }
 
   function entryByKey(key) {
     return state.index[key] || null;
   }
 
-  function updateHeaderCheck() {
-    var rows = visibleEntries();
+function updateHeaderCheck() {
+    var rows = visibleEntries().filter(isSelectable);
     var checked = 0;
     rows.forEach(function (e) { if (state.selection.has(e.key)) checked += 1; });
     el.checkAll.checked = rows.length > 0 && checked === rows.length;
@@ -593,7 +625,9 @@ var dir = state.sortDir;
 
   /* ---------- 選択操作 ---------- */
 
-  function toggleCheck(key, checked) {
+function toggleCheck(key, checked) {
+    var e = state.index[key];
+    if (!isSelectable(e)) return;
     if (checked) state.selection.add(key);
     else state.selection.delete(key);
     invalidateVisible();
@@ -605,9 +639,11 @@ var dir = state.sortDir;
     }
   }
 
+  /* 一括選択（コピー元の行のみ対象。コピー先は参照のみなので触らない） */
   function bulkSelect(selector) {
     invalidateVisible();
     visibleEntries().forEach(function (e) {
+      if (!isSelectable(e)) return;
       var want = selector(e);
       if (want) state.selection.add(e.key);
       else state.selection.delete(e.key);
@@ -666,15 +702,6 @@ function runCopy() {
     if (!state.dest || !state.dest.handle) {
       log('err', 'コピー先（目標フォルダ）が設定されていません');
       return;
-    }
-
-    var destSelected = 0;
-    state.selection.forEach(function (key) {
-      var e = state.index[key];
-      if (e && e.role === 'dest') destSelected += 1;
-    });
-    if (destSelected) {
-      log('info', 'コピー先（目標フォルダ）のファイル ' + destSelected + ' 件は選択されていますが、コピー元のみがコピー対象です');
     }
 
     var jobs = buildJobs();
@@ -843,14 +870,12 @@ function runCopy() {
   function reconcileSlots(iniPaths) {
     allSlots().forEach(function (slot) {
       if (!slot.handle) return;
-      var want = iniPaths[slot.id] || '';
+var want = iniPaths[slot.id] || '';
       if (want && slot.path && want.toLowerCase() !== slot.path.toLowerCase()) {
-        slot.note = 'ini のパスと選択フォルダが一致しません（記録: ' + slot.path + '）';
+        slot.pathNote = 'ini のパスと選択フォルダが一致しません（記録: ' + slot.path + '）';
         log('warn', slotTitle(slot) + '：ini のパスと選択済みフォルダが一致しません。ini=' + want + ' / 選択=' + slot.path);
       } else if (want && !slot.path) {
         slot.path = want;
-      } else if (!slot.note) {
-        slot.note = '';
       }
     });
   }
@@ -876,7 +901,7 @@ function runCopy() {
       'fsStatus', 'btnIniBind', 'btnIniLoad', 'btnIniSave', 'btnIniEdit',
       'destSlot', 'srcSlots', 'btnAddSource', 'btnRescanAll', 'btnRestore',
       'filterText', 'optOnlyMissing', 'optGroup',
-      'btnSelectAll', 'btnSelectNone', 'btnSelectInvert', 'btnSelectSrcOnly',
+      'btnSelectAll', 'btnSelectNone', 'btnSelectInvert',
       'fileBody', 'fileTable', 'tableWrap', 'listEmpty', 'listSummary', 'selSummary', 'checkAll',
       'logBody', 'btnClearLog', 'optKeepTree', 'optOverwrite',
       'progressBar', 'progressText', 'btnCopy', 'btnCancel',
@@ -924,8 +949,7 @@ function runCopy() {
 
     el.btnSelectAll.addEventListener('click', function () { bulkSelect(function () { return true; }); });
     el.btnSelectNone.addEventListener('click', function () { bulkSelect(function () { return false; }); });
-    el.btnSelectInvert.addEventListener('click', function () { bulkSelect(function (e) { return !state.selection.has(e.key); }); });
-    el.btnSelectSrcOnly.addEventListener('click', function () { bulkSelect(function (e) { return e.role === 'source'; }); });
+el.btnSelectInvert.addEventListener('click', function () { bulkSelect(function (e) { return !state.selection.has(e.key); }); });
 
     el.checkAll.addEventListener('change', function () {
       var want = el.checkAll.checked;
@@ -944,10 +968,12 @@ function runCopy() {
       updateControls();
     });
 
-    el.fileBody.addEventListener('click', function (ev) {
+el.fileBody.addEventListener('click', function (ev) {
       if (ev.target && ev.target.classList && ev.target.classList.contains('row-check')) return;
       var tr = ev.target.closest ? ev.target.closest('tr') : null;
       if (!tr || !tr.dataset.key) return;
+      var e = state.index[tr.dataset.key];
+      if (!isSelectable(e)) return;
       var box = tr.querySelector('.row-check');
       toggleCheck(tr.dataset.key, !box.checked);
       updateHeaderCheck();

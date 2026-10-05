@@ -210,6 +210,11 @@ code { font-family: var(--mono); font-size: .95em; }
   border-radius: 4px;
 }
 .slot-path:focus { outline: 2px solid var(--accent-weak); border-color: var(--accent); }
+.slot-path.is-draft {
+  border-color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 8%, var(--panel));
+  color: var(--warn);
+}
 .slot-stat { font-size: 11px; color: var(--muted); white-space: nowrap; min-width: 96px; text-align: right; }
 .slot-actions { display: flex; gap: 4px; }
 
@@ -302,6 +307,9 @@ tbody td {
 }
 tbody tr:hover { background: var(--row-hover); }
 tbody tr.is-selected { background: var(--accent-weak); }
+tbody tr.is-fixed { color: var(--muted); }
+tbody tr.is-fixed .col-check { opacity: .55; }
+tbody tr.is-fixed:hover { background: var(--row-hover); }
 tbody tr.is-selected:hover { filter: brightness(.98); }
 tbody tr.group-row { background: var(--bg); font-weight: 600; }
 tbody tr.group-row td { border-bottom: 1px solid var(--border); }
@@ -354,6 +362,7 @@ td.col-name .dir { color: var(--muted); }
   font-size: 11px;
   color: var(--muted);
 }
+.list-hint { margin: 2px 0 0; }
 
 /* ---------- ログ ---------- */
 

@@ -50,7 +50,7 @@
     <div id="srcSlots"></div>
     <div class="slot-foot">
       <button id="btnAddSource" class="btn btn-sm" type="button">＋ ソースフォルダを追加</button>
-      <button id="btnRescanAll" class="btn btn-sm" type="button">一覧を再スキャン</button>
+      <button id="btnRescanAll" class="btn btn-sm" type="button">全フォルダを再スキャン</button>
       <button id="btnRestore" class="btn btn-sm" type="button" hidden>保存済みフォルダの権限を要求</button>
     </div>
   </div>
@@ -67,7 +67,6 @@
       <button id="btnSelectAll" class="btn btn-sm" type="button">表示中を全選択</button>
       <button id="btnSelectNone" class="btn btn-sm" type="button">選択解除</button>
       <button id="btnSelectInvert" class="btn btn-sm" type="button">反転</button>
-      <button id="btnSelectSrcOnly" class="btn btn-sm" type="button">コピー元のみ選択</button>
     </div>
   </div>
 
@@ -75,7 +74,7 @@
     <table id="fileTable">
       <thead>
         <tr>
-          <th class="col-check"><input type="checkbox" id="checkAll" title="表示中の全選択/解除"></th>
+          <th class="col-check"><input type="checkbox" id="checkAll" title="表示中のコピー元を全選択/解除"></th>
           <th class="col-slot">フォルダ</th>
           <th class="col-name sortable" data-sort="name">ファイル（相対パス）</th>
           <th class="col-size sortable" data-sort="size">サイズ</th>
@@ -94,6 +93,7 @@
     <span class="grow"></span>
     <span class="muted" id="selSummary"></span>
   </div>
+  <p class="hint list-hint">コピー先（目標フォルダ）の行は参照のみで選択できません（チェックボックスが無効）。選択してコピーできるのはコピー元のファイルです。</p>
 </section>
 
 <section class="panel log-panel">
@@ -108,7 +108,7 @@
   <div class="options">
     <label class="chk"><input type="checkbox" id="optKeepTree" checked> サブフォルダ構成を保持</label>
     <label class="chk"><input type="checkbox" id="optOverwrite" checked> 既存ファイルを上書き</label>
-    <span class="muted small">※ コピー先の日時は保持されず、コピー実行時刻になります。</span>
+    <span class="muted small">※ コピー先の日時は保持されずコピー実行時刻になります（ブラウザの API 仕様上、時刻は変更できません）。</span>
   </div>
   <div class="copy-area">
     <div class="progress-wrap">
