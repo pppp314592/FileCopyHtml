@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FileCopyHtml — 複数フォルダ → 目標フォルダ コピー</title>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<header class="app-header">
+  <div class="brand">
+    <h1>FileCopyHtml</h1>
+    <span class="subtitle">複数のフォルダからファイルを選び、目標フォルダへ一括コピー</span>
+  </div>
+  <div class="header-actions">
+    <span id="fsStatus" class="badge">起動中…</span>
+    <span class="sep"></span>
+    <button id="btnIniBind" class="btn" type="button">config.ini を選択…</button>
+    <button id="btnIniLoad" class="btn" type="button">ini 読込</button>
+    <button id="btnIniSave" class="btn" type="button">ini 保存</button>
+    <button id="btnIniEdit" class="btn" type="button">ini 編集…</button>
+  </div>
+</header>
+
+<section class="panel">
+  <div class="panel-head">
+    <h2>フォルダ設定</h2>
+    <span class="hint" title="「パス」欄の内容は ini に記録されるだけで、実際のファイル操作は「選択…」で許可したフォルダに対して行われます。">「パス」欄は ini に記録されます。ネットワーク共有（<code>\\サーバー\共有</code>）も記入できます（下の注記を参照）。</span>
+  </div>
+
+  <div class="note" id="netNote">
+    <strong>ネットワークフォルダについて:</strong>
+    各枠の「選択…」から Chrome / Edge のフォルダダイアログで指定します（ネットワークの場所や <code>\\サーバー\共有</code> の直接入力可）。
+    ブラウザ側でUNC 共有を選択できない場合は、<code>net use Z: \\サーバー\共有</code> でドライブを割り当て、そのドライブから選択してください。
+  </div>
+
+  <div class="slots" id="destArea">
+    <div class="slot-head">
+      <span class="slot-role role-dest">コピー先（目標フォルダ）</span>
+    </div>
+    <div id="destSlot" class="slot-row" data-role="dest"></div>
+  </div>
+
+  <div class="slots">
+    <div class="slot-head">
+      <span class="slot-role role-src">ソースフォルダ（コピー元）</span>
+      <span class="hint">リスト内で複数選択できます（既定 3 個）</span>
+    </div>
+    <div id="srcSlots"></div>
+    <div class="slot-foot">
+      <button id="btnAddSource" class="btn btn-sm" type="button">＋ ソースフォルダを追加</button>
+      <button id="btnRescanAll" class="btn btn-sm" type="button">一覧を再スキャン</button>
+      <button id="btnRestore" class="btn btn-sm" type="button" hidden>保存済みフォルダの権限を要求</button>
+    </div>
+  </div>
+</section>
+
+<section class="panel list-panel">
+  <div class="panel-head">
+    <h2>ファイル一覧</h2>
+    <div class="list-tools">
+      <input id="filterText" type="search" class="text-input" placeholder="フィルタ（ファイル名 / パス）" autocomplete="off">
+      <label class="chk"><input type="checkbox" id="optOnlyMissing"> コピー先に同名がないもの</label>
+      <label class="chk"><input type="checkbox" id="optGroup"> フォルダでグループ化</label>
+      <span class="sep"></span>
+      <button id="btnSelectAll" class="btn btn-sm" type="button">表示中を全選択</button>
+      <button id="btnSelectNone" class="btn btn-sm" type="button">選択解除</button>
+      <button id="btnSelectInvert" class="btn btn-sm" type="button">反転</button>
+      <button id="btnSelectSrcOnly" class="btn btn-sm" type="button">コピー元のみ選択</button>
+    </div>
+  </div>
+
+  <div class="table-wrap" id="tableWrap">
+    <table id="fileTable">
+      <thead>
+        <tr>
+          <th class="col-check"><input type="checkbox" id="checkAll" title="表示中の全選択/解除"></th>
+          <th class="col-slot">フォルダ</th>
+          <th class="col-name sortable" data-sort="name">ファイル（相対パス）</th>
+          <th class="col-size sortable" data-sort="size">サイズ</th>
+          <th class="col-date sortable" data-sort="date">更新日時</th>
+          <th class="col-state">状態</th>
+          <th class="col-result">結果</th>
+        </tr>
+      </thead>
+      <tbody id="fileBody"></tbody>
+    </table>
+    <div id="listEmpty" class="empty">フォルダが未設定です。上の「選択…」からフォルダを指定してください。</div>
+  </div>
+
+  <div class="list-foot">
+    <span id="listSummary">0 ファイル</span>
+    <span class="grow"></span>
+    <span class="muted" id="selSummary"></span>
+  </div>
+</section>
+
+<section class="panel log-panel">
+  <div class="panel-head">
+    <h2>実行ログ</h2>
+    <button id="btnClearLog" class="btn btn-sm" type="button">クリア</button>
+  </div>
+  <div id="logBody" class="log-body"></div>
+</section>
+
+<footer class="app-footer">
+  <div class="options">
+    <label class="chk"><input type="checkbox" id="optKeepTree" checked> サブフォルダ構成を保持</label>
+    <label class="chk"><input type="checkbox" id="optOverwrite" checked> 既存ファイルを上書き</label>
+    <span class="muted small">※ コピー先の日時は保持されず、コピー実行時刻になります。</span>
+  </div>
+  <div class="copy-area">
+    <div class="progress-wrap">
+      <div class="progress"><div class="progress-bar" id="progressBar"></div></div>
+      <span class="progress-text" id="progressText">待機中</span>
+    </div>
+    <button id="btnCancel" class="btn" type="button" hidden>中断</button>
+    <button id="btnCopy" class="btn btn-primary" type="button">コピー実行</button>
+  </div>
+</footer>
+
+<div id="modal" class="modal" hidden>
+  <div class="modal-box">
+    <div class="modal-head">
+      <h3>config.ini の編集</h3>
+      <button id="btnModalClose" class="btn btn-sm" type="button">閉じる</button>
+    </div>
+    <div class="modal-body">
+      <p class="muted small">
+        貼り付けた内容を「適用」で読み込み、「ダウンロード」で config.ini として保存できます。
+        ブラウザから直接ファイルを書き込めない場合は、この方法を使ってください。
+      </p>
+      <textarea id="iniText" class="ini-text" spellcheck="false" rows="18"></textarea>
+    </div>
+    <div class="modal-foot">
+      <button id="btnIniDownload" class="btn" type="button">ダウンロード</button>
+      <span class="grow"></span>
+      <button id="btnIniApply" class="btn" type="button">内容を適用</button>
+      <button id="btnIniConfirm" class="btn btn-primary" type="button">適用して保存</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/folder.js"></script>
+<script src="js/copy.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

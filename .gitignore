@@ -1,0 +1,9 @@
+# OS / エディタ
+Thumbs.db
+desktop.ini
+.DS_Store
+*.swp
+
+# 一時ファイル
+*.log
+~$*
